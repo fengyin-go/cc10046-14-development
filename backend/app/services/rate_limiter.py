@@ -1,6 +1,8 @@
 """__NAME__领域服务：字段、状态和动作来自业务配置，数据处理骨架由基类复用。"""
 from __future__ import annotations
 
+from typing import Any
+
 from app.services.base import BaseModuleService
 
 
@@ -29,3 +31,39 @@ class RateLimiterService(BaseModuleService):
             "window_seconds": window_seconds,
             "max_per_second": max_per_second,
         }
+
+    # 按来源生效的限速准入：委托给独立账本服务，避免把窗口状态塞进策略行。
+    def domain_set_policy(self, site: str, limit_per_window: int,
+                          window_seconds: int | None = None, note: str = "") -> dict:
+        """写入站点每窗口可派发页数的新策略版本。"""
+        from app.services.rate_admission import rate_admission
+        return rate_admission.set_policy(site, limit_per_window, window_seconds, note)
+
+    def domain_create_claim(self, site: str, requested_pages: int,
+                            window: str | None = None,
+                            idempotency_key: str | None = None) -> dict:
+        """按站点、实际窗口和阈值预核一笔领取。"""
+        from app.services.rate_admission import rate_admission
+        return rate_admission.create_claim(site, requested_pages, window, idempotency_key)
+
+    def domain_confirm_claim(self, claim_id: int | str, resolution: str | None = None,
+                             idempotency_key: str | None = None,
+                             dispatch_pages: int | None = None) -> dict:
+        """确认领取；新旧阈值冲突时按 resolution 选择原额度或新阈值。"""
+        from app.services.rate_admission import rate_admission
+        return rate_admission.confirm_claim(
+            claim_id, resolution=resolution, idempotency_key=idempotency_key,
+            dispatch_pages=dispatch_pages,
+        )
+
+    def domain_dispatch_claim(self, claim_id: int | str, pages: int | None = None,
+                              idempotency_key: str | None = None) -> dict:
+        """实际派发页；续做只覆盖未发范围。"""
+        from app.services.rate_admission import rate_admission
+        return rate_admission.dispatch_claim(claim_id, pages, idempotency_key)
+
+    def domain_admission_logs(self, site: str | None = None,
+                              claim_key: str | None = None) -> list[dict[str, Any]]:
+        """返回限速准入日志，供值班员按实际派工核对。"""
+        from app.services.rate_admission import rate_admission
+        return rate_admission.logs(site, claim_key)

@@ -15,6 +15,11 @@
       </div>
     </header>
 
+    <p v-if="meta.key === 'rate_limiter'" class="notice" data-testid="admission-entry">
+      按来源派发页、核对暂缓范围和策略版本，请到
+      <RouterLink to="/rate_admission">限速准入</RouterLink> 处理。
+    </p>
+
     <div class="stat-row">
       <article v-for="item in stats" :key="item.label" class="stat-card">
         <span class="stat-label">{{ item.label }}</span>

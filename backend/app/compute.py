@@ -96,3 +96,48 @@ def retry_calculator(
     if jitter:
         delay = delay * (0.5 + random.random() * 0.5)
     return round(delay, 3)
+
+def admission_split(
+    requested_pages: int,
+    limit_per_window: int,
+    used_pages: int = 0,
+) -> tuple[int, int]:
+    """限速准入拆分：按窗口阈值计算可派发页数和暂缓页数。
+
+    ``used_pages`` 是该来源在该窗口已经实际派发的页数；同一来源的不同窗口
+    互不影响，不同来源也不共享额度。返回值 ``(allowed, deferred)``。
+    """
+    requested = max(int(requested_pages), 0)
+    limit = max(int(limit_per_window), 0)
+    used = max(int(used_pages), 0)
+    allowed = min(requested, max(limit - used, 0))
+    return allowed, requested - allowed
+
+
+def rate_admission_allowance(
+    site: str,
+    window: str,
+    limit_per_window: int,
+    requested_pages: int,
+    used_pages: int = 0,
+) -> dict[str, Any]:
+    """用站点、实际窗口和阈值计算允许派发的页数（纯函数，便于核对）。"""
+    allowed, deferred = admission_split(requested_pages, limit_per_window, used_pages)
+    return {
+        "site": site,
+        "window": window,
+        "limit_per_window": max(int(limit_per_window), 0),
+        "requested_pages": max(int(requested_pages), 0),
+        "used_pages": max(int(used_pages), 0),
+        "allowed_pages": allowed,
+        "deferred_pages": deferred,
+    }
+
+
+def page_range(start: int, count: int) -> str:
+    """把从 1 开始的页码区间格式化成 ``1-4`` 这样的可核对范围。"""
+    if count <= 0:
+        return ""
+    if count == 1:
+        return str(start)
+    return f"{start}-{start + count - 1}"
